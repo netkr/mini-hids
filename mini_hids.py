@@ -19,10 +19,10 @@ import fcntl
 
 # ==================== AI 智能研判配置 ====================
 LLM_CONFIG = {
-    "API_KEY": "sk-xxxxxxxxxxxxxxxx",
-    "BASE_URL": "https://api.your-provider.com/v1",
+    "API_KEY": "",
+    "BASE_URL": "",
     "MODEL_NAME": "gpt-4-turbo",
-    "ENABLED": True,
+    "ENABLED": False,
     "COOLDOWN_MINUTES": 60
 }
 # ========================================================
@@ -159,6 +159,8 @@ def detect_firewall():
         return "iptables"
     elif os.system("which nftables > /dev/null 2>&1") == 0:
         return "nftables"
+    elif os.system("which fail2ban-server > /dev/null 2>&1") == 0:
+        return "fail2ban"
     else:
         return None
 
@@ -181,6 +183,9 @@ def ban_ip(ip, reason):
         os.system(f"iptables -A INPUT -s {ip} -j DROP")
     elif firewall == "nftables":
         os.system(f"nft add rule ip filter input ip saddr {ip} drop")
+    elif firewall == "fail2ban":
+        # 使用 fail2ban 封禁 IP
+        os.system(f"fail2ban-client set sshd banip {ip}")
     
     log_alert(f"[封禁] IP {ip} 因 {reason} 被封禁")
     
@@ -205,6 +210,9 @@ def unban_ip(ip):
         os.system(f"iptables -D INPUT -s {ip} -j DROP")
     elif firewall == "nftables":
         os.system(f"nft delete rule ip filter input ip saddr {ip} drop")
+    elif firewall == "fail2ban":
+        # 使用 fail2ban 解封 IP
+        os.system(f"fail2ban-client set sshd unbanip {ip}")
     
     log_alert(f"[解封] IP {ip} 已自动解封")
     
@@ -383,6 +391,14 @@ def get_system_info():
 def analyze_with_ai(context):
     """使用AI分析攻击"""
     try:
+        # 检查API配置是否完整
+        api_key = LLM_CONFIG["API_KEY"]
+        base_url = LLM_CONFIG["BASE_URL"]
+        
+        if not api_key or not base_url:
+            log_alert("[AI分析] 未配置API密钥或URL，跳过AI分析")
+            return
+        
         # 构建请求数据
         prompt = f"请分析以下安全事件：\n"
         prompt += f"攻击类型：{context['attack_type']}\n"
@@ -392,13 +408,17 @@ def analyze_with_ai(context):
         prompt += "请提供详细的分析和处置建议。"
         
         # 构建API请求
-        api_key = LLM_CONFIG["API_KEY"]
-        base_url = LLM_CONFIG["BASE_URL"]
         model = LLM_CONFIG["MODEL_NAME"]
         
         # 解析URL
         if base_url.startswith('https://'):
             base_url = base_url[8:]
+        
+        # 检查URL格式
+        if '/' not in base_url:
+            log_alert("[AI分析] URL格式不正确，跳过AI分析")
+            return
+        
         host, path = base_url.split('/', 1)
         path = f"/{path}/chat/completions"
         
