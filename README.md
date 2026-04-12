@@ -1,5 +1,38 @@
 # Lightweight Host Intrusion Detection and Log Analysis System (Mini-HIDS)
 
+## Security and Permissions
+
+### Why Root Privileges Are Needed
+- **Firewall Management**: Root privileges are required to execute firewall commands (iptables, nftables, or fail2ban) to block and unblock malicious IPs
+- **Log Access**: Some system log files (e.g., /var/log/auth.log) require root access to read
+- **System Monitoring**: Access to system information (e.g., /proc/loadavg) may require elevated privileges
+
+### API Key Handling
+- **Optional Configuration**: API Key is optional - the system can run without AI analysis capabilities
+- **Security Recommendation**: Use environment variables to store API Key instead of hardcoding it in the Python file
+  ```bash
+  # Example: Set environment variables
+  export MINI_HIDS_API_KEY="sk-xxxxxxxxxxxxxxxx"
+  export MINI_HIDS_BASE_URL="https://api.your-provider.com/v1"
+  
+  # Then modify mini_hids.py to use environment variables
+  import os
+  LLM_CONFIG = {
+      "API_KEY": os.environ.get("MINI_HIDS_API_KEY", ""),
+      "BASE_URL": os.environ.get("MINI_HIDS_BASE_URL", ""),
+      "MODEL_NAME": "gpt-4-turbo",
+      "ENABLED": bool(os.environ.get("MINI_HIDS_API_KEY", "")),
+      "COOLDOWN_MINUTES": 60
+  }
+  ```
+- **File Permissions**: Ensure configuration files have permissions set to `600` to prevent API Key leakage
+
+### System Paths Accessed
+- **Log Files**: /var/log/auth.log, /var/log/secure, /var/log/nginx/access.log, /var/log/apache2/access.log, /var/log/mysql/mysql.log, /var/log/mysql/error.log
+- **System Information**: /proc/loadavg
+- **Web Directories**: /var/www/html, /var/www (for Webshell scanning)
+- **Local Files**: hids_alert.log, blacklist.db, mini_hids.pid
+
 ## Project Introduction
 
 Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on Python native libraries. It achieves minute-level handling capabilities for brute force attacks and Webshells by real-time monitoring of system key logs, combined with automated blocking logic and large model intelligent analysis.

@@ -1,5 +1,38 @@
 # 轻量级主机入侵检测与日志分析系统（Mini-HIDS）
 
+## 安全与权限说明
+
+### 为什么需要 Root 权限
+- **防火墙管理**：需要 Root 权限执行防火墙命令（iptables、nftables 或 fail2ban）来封禁和解封恶意 IP
+- **日志访问**：某些系统日志文件（如 /var/log/auth.log）需要 Root 权限才能读取
+- **系统监控**：访问系统信息（如 /proc/loadavg）可能需要提升权限
+
+### API Key 处理
+- **可选配置**：API Key 是可选的 - 系统可以在没有 AI 分析功能的情况下运行
+- **安全建议**：使用环境变量存储 API Key，而不是硬编码在 Python 文件中
+  ```bash
+  # 示例：设置环境变量
+  export MINI_HIDS_API_KEY="sk-xxxxxxxxxxxxxxxx"
+  export MINI_HIDS_BASE_URL="https://api.your-provider.com/v1"
+  
+  # 然后修改 mini_hids.py 使用环境变量
+  import os
+  LLM_CONFIG = {
+      "API_KEY": os.environ.get("MINI_HIDS_API_KEY", ""),
+      "BASE_URL": os.environ.get("MINI_HIDS_BASE_URL", ""),
+      "MODEL_NAME": "gpt-4-turbo",
+      "ENABLED": bool(os.environ.get("MINI_HIDS_API_KEY", "")),
+      "COOLDOWN_MINUTES": 60
+  }
+  ```
+- **文件权限**：确保配置文件权限设置为 `600`，防止 API Key 泄露
+
+### 系统路径访问
+- **日志文件**：/var/log/auth.log, /var/log/secure, /var/log/nginx/access.log, /var/log/apache2/access.log, /var/log/mysql/mysql.log, /var/log/mysql/error.log
+- **系统信息**：/proc/loadavg
+- **Web 目录**：/var/www/html, /var/www（用于 Webshell 扫描）
+- **本地文件**：hids_alert.log, blacklist.db, mini_hids.pid
+
 ## 项目简介
 
 Mini-HIDS 是一个基于 Python 原生库的零依赖、智能化 Linux 服务器防御工具。它通过实时监听系统关键日志，配合自动化封禁逻辑与大模型智能分析，实现对暴力破解与 Webshell 的分钟级处置能力。
