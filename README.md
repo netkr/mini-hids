@@ -35,11 +35,15 @@
 
 ## Project Introduction
 
-Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on Python native libraries. It achieves minute-level handling capabilities for brute force attacks and Webshells by real-time monitoring of system key logs, combined with automated blocking logic and large model intelligent analysis.
+Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on Python native libraries. It uses a C/S (Client/Server) architecture to achieve minute-level handling capabilities for brute force attacks and Webshells.
+
+**Architecture Overview**
+- **mini_hids.py** (Data Plane / Background Daemon): Runs 7×24 hours, responsible for underlying monitoring and automatic defense
+- **hids_cli.py** (Control Plane / Agent-specific Interface): Command-line tool for Agent calls, returns standard JSON format immediately after execution
 
 **Installation Methods**
-1. Without using an agent: Deploy to a cloud server via git, run the file and fill in your large model URL and API-key;
-2. Using an agent: Send the project link to an agent (such as openclaw, hermes agent), and tell it to "package this project into a skill" and authorize it;
+1. **Traditional deployment**: Deploy to a cloud server via git, run the daemon and use the CLI tool for management
+2. **Agent integration**: Send the project link to an agent (such as openclaw, hermes agent), and tell it to "package this project into a skill" and authorize it;
 
 ## Core Features
 
@@ -73,36 +77,46 @@ Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on P
    cd mini-hids
    ```
 
-2. **Configure AI interface**
-   Edit the `LLM_CONFIG` configuration block at the top of the `mini_hids.py` file, fill in your large model API information:
+2. **Modify system configuration**
+   Edit the `mini_hids.py` file, adjust the configuration according to your server environment:
    ```python
-   LLM_CONFIG = {
-       "API_KEY": "sk-xxxxxxxxxxxxxxxx",
-       "BASE_URL": "https://api.your-provider.com/v1",
-       "MODEL_NAME": "gpt-4-turbo",
-       "ENABLED": True,
-       "COOLDOWN_MINUTES": 60
-   }
-   ```
-
-3. **Modify system configuration**
-   Edit the `config.json` file, adjust the configuration according to your server environment:
-   ```json
-   {
+   CONFIG = {
        "LOG_PATHS": {
            "auth": ["/var/log/auth.log", "/var/log/secure"],
            "web": ["/var/log/nginx/access.log", "/var/log/apache2/access.log"],
            "mysql": ["/var/log/mysql/mysql.log", "/var/log/mysql/error.log"]
        },
-       "BAN_TIME": 3600,
-       "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],
-       "WEB_ROOT": ["/var/www/html", "/var/www"]
+       "BAN_TIME": 3600,  # 封禁时间（秒）
+       "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],  # 白名单IP
+       "WEB_ROOT": ["/var/www/html", "/var/www"],  # Web根目录
+       "BLACKLIST_DB": "blacklist.db",
+       "ALERT_LOG": "hids_alert.log",
+       "MAX_FAILURES": 5,  # 最大失败次数
+       "WINDOW_SECONDS": 300,  # 滑动窗口时间（秒）
    }
    ```
 
-4. **Run the system**
+3. **Run the background daemon**
    ```bash
    sudo python3 mini_hids.py
+   ```
+
+4. **Use the CLI tool**
+   ```bash
+   # Check system status
+   python3 hids_cli.py --action status
+   
+   # Get recent alerts
+   python3 hids_cli.py --action get_alerts --lines 20
+   
+   # Get current blacklist
+   python3 hids_cli.py --action get_blacklist
+   
+   # Manually ban an IP
+   python3 hids_cli.py --action ban --ip 192.168.1.100 --reason "Manual ban"
+   
+   # Manually unban an IP
+   python3 hids_cli.py --action unban --ip 192.168.1.100
    ```
 
 ## Configuration Instructions

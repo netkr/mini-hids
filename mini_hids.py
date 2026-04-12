@@ -2,31 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 轻量级主机入侵检测与日志分析系统（Mini-HIDS）
-版本：v0.1
+版本：v1.0
 功能：实时监控系统日志，检测暴力破解和Webshell，自动封禁恶意IP
+定位：后台守护进程，负责7×24小时底层监控与自动防御
 """
 
 import os
 import re
-import json
 import socket
-import http.client
 import time
 import threading
 import sqlite3
 import stat
-import fcntl
 from collections import deque
-
-# ==================== AI 智能研判配置 ====================
-LLM_CONFIG = {
-    "API_KEY": "",
-    "BASE_URL": "",
-    "MODEL_NAME": "gpt-4-turbo",
-    "ENABLED": False,
-    "COOLDOWN_MINUTES": 60
-}
-# ========================================================
 
 # 系统配置
 CONFIG = {
@@ -41,11 +29,7 @@ CONFIG = {
     "BLACKLIST_DB": "blacklist.db",
     "ALERT_LOG": "hids_alert.log",
     "MAX_FAILURES": 5,  # 最大失败次数
-    "CHECK_INTERVAL": 1,  # 检查间隔（秒）
-    "AI_COOLDOWN": LLM_CONFIG["COOLDOWN_MINUTES"] * 60,  # AI冷却时间（秒）
     "WINDOW_SECONDS": 300,  # 滑动窗口时间（秒）
-    "MAX_QUEUE_SIZE": 100,  # AI分析队列最大长度
-    "WEBHOOK_URL": ""  # 协同防御Webhook地址
 }
 
 # Webshell特征
@@ -91,15 +75,10 @@ SSH_FAILURE_PATTERN = re.compile(r'Failed password for .* from (\S+)')
 IP_EXTRACT_PATTERN = re.compile(r'(\S+) - - \[')
 
 # 全局变量
-ai_cooldown_times = {}
 ban_times = {}
 blacklist = set()
 # 滑动窗口计数器，记录每个IP的失败时间戳
 ip_failures = {}
-# AI分析队列
-ai_analysis_queue = deque(maxlen=CONFIG["MAX_QUEUE_SIZE"])
-# AI分析队列锁
-ai_queue_lock = threading.Lock()
 
 # Webshell扫描相关
 last_scan_time = 0
@@ -379,22 +358,8 @@ def detect_ssh_brute_force(line):
             # 检查是否达到阈值
             if len(ip_failures[ip]) >= CONFIG["MAX_FAILURES"]:
                 log_alert(f"[SSH暴力破解] 检测到来自 {ip} 的登录失败，已达到阈值")
-                # 快轨：直接封禁
+                # 直接封禁
                 ban_ip(ip, "SSH暴力破解")
-                
-                # 智轨：加入AI分析队列
-                attack_context = {
-                    "attack_type": "SSH暴力破解",
-                    "ip": ip,
-                    "log_line": line,
-                    "timestamp": current_time,
-                    "failure_count": len(ip_failures[ip])
-                }
-                with ai_queue_lock:
-                    ai_analysis_queue.append(attack_context)
-                
-                # 检查是否需要AI分析
-                check_ai_analysis(ip, "SSH暴力破解", line)
 
 
 def detect_web_attack(line):
@@ -424,23 +389,8 @@ def detect_web_attack(line):
                     # 检查是否达到阈值
                     if len(ip_failures[ip]) >= CONFIG["MAX_FAILURES"]:
                         log_alert(f"[Web攻击] 检测到来自 {ip} 的可能攻击: {pattern}，已达到阈值")
-                        # 快轨：直接封禁
+                        # 直接封禁
                         ban_ip(ip, "Web攻击")
-                        
-                        # 智轨：加入AI分析队列
-                        attack_context = {
-                            "attack_type": "Web攻击",
-                            "ip": ip,
-                            "log_line": line,
-                            "timestamp": current_time,
-                            "failure_count": len(ip_failures[ip]),
-                            "attack_pattern": pattern
-                        }
-                        with ai_queue_lock:
-                            ai_analysis_queue.append(attack_context)
-                        
-                        # 检查是否需要AI分析
-                        check_ai_analysis(ip, "Web攻击", line)
             break
 
 
@@ -491,247 +441,6 @@ def scan_webshell():
     log_alert(f"[Webshell扫描] 完成扫描，共扫描 {scanned_files} 个文件，其中 {modified_files} 个是修改过的文件，耗时 {scan_duration:.2f} 秒")
 
 
-def check_ai_analysis(ip, attack_type, log_line):
-    """检查是否需要AI分析"""
-    if not LLM_CONFIG["ENABLED"]:
-        return
-    
-    # 检查冷却时间
-    key = f"{attack_type}:{ip}"
-    current_time = time.time()
-    if key in ai_cooldown_times and current_time < ai_cooldown_times[key]:
-        return
-    
-    # 更新冷却时间
-    ai_cooldown_times[key] = current_time + CONFIG["AI_COOLDOWN"]
-    
-    # 收集上下文信息
-    context = {
-        "attack_type": attack_type,
-        "ip": ip,
-        "log_line": log_line,
-        "system_info": get_system_info(),
-        "current_time": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-    
-    # 异步调用AI分析
-    threading.Thread(target=analyze_with_ai, args=(context,)).start()
-
-
-def get_system_info():
-    """获取系统信息"""
-    system_info = {}
-    
-    # 获取系统负载
-    try:
-        with open('/proc/loadavg', 'r') as f:
-            system_info['load_avg'] = f.read().strip()
-    except:
-        pass
-    
-    # 获取登录用户
-    try:
-        import subprocess
-        result = subprocess.run(['who'], capture_output=True, text=True)
-        system_info['logged_in_users'] = result.stdout.strip()
-    except:
-        pass
-    
-    return system_info
-
-
-def process_ai_analysis_queue():
-    """处理AI分析队列"""
-    while True:
-        try:
-            # 检查队列是否有任务
-            with ai_queue_lock:
-                if ai_analysis_queue:
-                    context = ai_analysis_queue.popleft()
-                else:
-                    context = None
-            
-            if context:
-                # 调用AI分析
-                analyze_with_ai(context)
-            else:
-                # 队列为空，休息一下
-                time.sleep(1)
-        except Exception as e:
-            log_alert(f"[AI队列处理错误] {e}")
-            time.sleep(1)
-
-
-def parse_ai_strategy(raw_ai_response):
-    """[安全核心] 解析AI返回的防御策略，严禁执行eval()或直接sh运行"""
-    try:
-        # 清理响应内容
-        response = raw_ai_response.strip()
-        
-        # 尝试提取Markdown代码块中的JSON
-        code_block_match = re.search(r'```json\n(.*?)\n```', response, re.DOTALL)
-        if code_block_match:
-            response = code_block_match.group(1).strip()
-        
-        # 尝试提取任何代码块中的JSON
-        code_match = re.search(r'```(.*?)```', response, re.DOTALL)
-        if code_match:
-            response = code_match.group(1).strip()
-        
-        # 解析JSON
-        strategy = json.loads(response)
-        return strategy
-    except Exception as e:
-        log_alert(f"[AI策略解析失败] {e}，降级为单IP封禁")
-        return None
-
-
-def send_webhook_alert(alert_data):
-    """发送Webhook告警"""
-    if not CONFIG["WEBHOOK_URL"]:
-        return
-    
-    try:
-        import urllib.request
-        import urllib.error
-        
-        # 构建告警数据
-        data = json.dumps(alert_data).encode('utf-8')
-        headers = {'Content-Type': 'application/json'}
-        
-        # 发送请求
-        req = urllib.request.Request(CONFIG["WEBHOOK_URL"], data=data, headers=headers)
-        with urllib.request.urlopen(req, timeout=5) as response:
-            if response.getcode() == 200:
-                log_alert("[Webhook] 告警发送成功")
-            else:
-                log_alert(f"[Webhook] 告警发送失败，状态码: {response.getcode()}")
-    except Exception as e:
-        log_alert(f"[Webhook] 告警发送错误: {e}")
-
-
-def execute_ai_strategy(strategy, context):
-    """执行AI生成的防御策略"""
-    try:
-        if not strategy:
-            return
-        
-        action = strategy.get("action", "block")
-        target = strategy.get("target", "IP")
-        value = strategy.get("value", context["ip"])
-        duration = strategy.get("duration", CONFIG["BAN_TIME"])
-        threat_score = strategy.get("threat_score", 0)
-        
-        if action == "block":
-            if target == "SUBNET":
-                # 封禁整个子网
-                log_alert(f"[AI策略] 执行子网封禁: {value}")
-                # 这里可以实现子网封禁逻辑
-            else:
-                # 封禁单个IP
-                log_alert(f"[AI策略] 执行IP封禁: {value}, 时长: {duration}秒, 威胁评分: {threat_score}")
-                # 更新封禁时间
-                ban_times[value] = time.time() + duration
-        
-        # 发送Webhook告警
-        alert_data = {
-            "action": action,
-            "target": target,
-            "value": value,
-            "duration": duration,
-            "threat_score": threat_score,
-            "context": context
-        }
-        send_webhook_alert(alert_data)
-    except Exception as e:
-        log_alert(f"[AI策略执行错误] {e}")
-
-
-def analyze_with_ai(context):
-    """使用AI分析攻击并生成防御策略"""
-    try:
-        # 检查API配置是否完整
-        api_key = LLM_CONFIG["API_KEY"]
-        base_url = LLM_CONFIG["BASE_URL"]
-        
-        if not api_key or not base_url:
-            log_alert("[AI分析] 未配置API密钥或URL，跳过AI分析")
-            return
-        
-        # 构建请求数据
-        prompt = f"请分析以下安全事件：\n"
-        prompt += f"攻击类型：{context['attack_type']}\n"
-        prompt += f"攻击IP：{context['ip']}\n"
-        prompt += f"原始日志：{context['log_line']}\n"
-        prompt += f"系统信息：{json.dumps(get_system_info(), indent=2)}\n"
-        prompt += f"失败次数：{context.get('failure_count', 1)}\n"
-        if 'attack_pattern' in context:
-            prompt += f"攻击特征：{context['attack_pattern']}\n"
-        prompt += "\n请从安全专家角度给出防御指令，返回JSON格式：\n"
-        prompt += "{\"action\": \"block\", \"target\": \"IP|SUBNET\", \"value\": \"目标IP或子网\", \"duration\": 封禁时长(秒), \"threat_score\": 威胁评分(0-100)}"
-        
-        # 构建API请求
-        model = LLM_CONFIG["MODEL_NAME"]
-        
-        # 解析URL
-        import urllib.parse
-        
-        # 确保URL有协议
-        if not base_url.startswith(('http://', 'https://')):
-            base_url = 'https://' + base_url
-        
-        # 解析URL
-        parsed_url = urllib.parse.urlparse(base_url)
-        host = parsed_url.netloc
-        path = parsed_url.path
-        
-        # 构建完整的API路径
-        if not path.endswith('/chat/completions'):
-            if path.endswith('/'):
-                path += 'chat/completions'
-            else:
-                path += '/chat/completions'
-        
-        # 确保path以/开头
-        if not path.startswith('/'):
-            path = '/' + path
-        
-        # 构建请求体
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": "你是一个专业的安全分析师，负责分析服务器安全事件并提供处置建议。请严格返回JSON格式的防御指令，不要包含其他文本。"},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7
-        }
-        
-        # 发送请求
-        conn = http.client.HTTPSConnection(host, timeout=10)
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        conn.request("POST", path, json.dumps(payload), headers)
-        response = conn.getresponse()
-        
-        if response.status == 200:
-            data = json.loads(response.read().decode())
-            if "choices" in data and data["choices"]:
-                raw_response = data["choices"][0]["message"]["content"]
-                log_alert(f"[AI分析] 收到分析结果: {raw_response}")
-                
-                # 解析AI策略
-                strategy = parse_ai_strategy(raw_response)
-                # 执行AI策略
-                execute_ai_strategy(strategy, context)
-        else:
-            log_alert(f"[AI分析失败] 状态码: {response.status}")
-            
-    except Exception as e:
-        log_alert(f"[AI分析错误] {e}")
-
-
 def main():
     """主函数"""
     # 检查平台
@@ -758,12 +467,6 @@ def main():
     try:
         # 设置环境
         setup_environment()
-        
-        # 启动AI分析队列处理线程
-        ai_thread = threading.Thread(target=process_ai_analysis_queue)
-        ai_thread.daemon = True
-        ai_thread.start()
-        log_alert("[AI分析] 启动AI分析队列处理线程")
         
         # 启动日志监控线程
         log_threads = []
