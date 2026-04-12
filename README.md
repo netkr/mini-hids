@@ -63,7 +63,7 @@ Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on P
 
 1. **Clone the project**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/netkr/mini-hids.git
    cd mini-hids
    ```
 
