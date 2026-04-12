@@ -1,0 +1,108 @@
+# Lightweight Host Intrusion Detection and Log Analysis System (Mini-HIDS)
+
+## Project Introduction
+
+Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on Python native libraries. It achieves minute-level handling capabilities for brute force attacks and Webshells by real-time monitoring of system key logs, combined with automated blocking logic and large model intelligent analysis.
+
+**Installation Methods**
+1. Without using an agent: Deploy to a cloud server via git, run the file and fill in your large model URL and API-key;
+2. Using an agent: Send the project link to an agent (such as openclaw, hermes agent), and tell it to "package this project into a skill" and authorize it;
+
+## Core Features
+
+- **Real-time Log Monitoring**: Supports `tail -F` logic, based on Inode monitoring to achieve log rotation compatibility
+- **Brute Force Attack Detection**: Automatically detects SSH brute force attacks and blocks malicious IPs
+- **Web Attack Detection**: Detects SQL injection, XSS and other web attacks
+- **Webshell Scanning**: Deep recursive scanning of web root directories, matching high-risk fingerprints
+- **AI Intelligent Analysis**: Integrates large model analysis capabilities to provide professional security recommendations
+- **Dynamic Blocking**: Supports setting blocking time, automatically unblocks after expiration
+- **Whitelist Exemption**: Ensures administrator IPs are never intercepted
+
+## Quick Start
+
+### Environment Requirements
+
+- Python 3.6+
+- Linux system
+- Firewall (iptables, nftables, or fail2ban)
+
+### Installation and Running
+
+1. **Clone the project**
+   ```bash
+   git clone <repository-url>
+   cd mini-hids
+   ```
+
+2. **Configure AI interface**
+   Edit the `LLM_CONFIG` configuration block at the top of the `mini_hids.py` file, fill in your large model API information:
+   ```python
+   LLM_CONFIG = {
+       "API_KEY": "sk-xxxxxxxxxxxxxxxx",
+       "BASE_URL": "https://api.your-provider.com/v1",
+       "MODEL_NAME": "gpt-4-turbo",
+       "ENABLED": True,
+       "COOLDOWN_MINUTES": 60
+   }
+   ```
+
+3. **Modify system configuration**
+   Edit the `config.json` file, adjust the configuration according to your server environment:
+   ```json
+   {
+       "LOG_PATHS": {
+           "auth": ["/var/log/auth.log", "/var/log/secure"],
+           "web": ["/var/log/nginx/access.log", "/var/log/apache2/access.log"],
+           "mysql": ["/var/log/mysql/mysql.log", "/var/log/mysql/error.log"]
+       },
+       "BAN_TIME": 3600,
+       "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],
+       "WEB_ROOT": ["/var/www/html", "/var/www"]
+   }
+   ```
+
+4. **Run the system**
+   ```bash
+   sudo python3 mini_hids.py
+   ```
+
+## Configuration Instructions
+
+### Core Configuration Items
+
+- **LOG_PATHS**: Paths to log files that need to be monitored
+- **BAN_TIME**: IP blocking time (seconds)
+- **TRUSTED_IPS**: Whitelist IP list
+- **WEB_ROOT**: Web root directory path, used for Webshell scanning
+- **BAN_TIME**: IP blocking time (seconds)
+- **MAX_FAILURES**: Maximum number of failures, exceeding this value will trigger blocking
+
+### AI Configuration Items
+
+- **API_KEY**: Large model API key
+- **BASE_URL**: Large model API address
+- **MODEL_NAME**: Model name used
+- **ENABLED**: Whether to enable AI analysis
+- **COOLDOWN_MINUTES**: AI analysis cooldown time (minutes)
+
+## Logs and Alerts
+
+- **hids_alert.log**: System alert logs
+- **blacklist.db**: Blacklist database
+
+## Security Recommendations
+
+1. **Permission Settings**: Ensure configuration file permissions are `600` to prevent API Key leakage
+2. **Regular Updates**: Regularly update the Webshell signature database
+3. **Whitelist Management**: Properly configure whitelist to avoid false blocking
+4. **Monitoring Frequency**: Adjust monitoring frequency based on server load
+
+## Notes
+
+- This system requires root privileges to run in order to execute firewall commands
+- Necessary directories and files will be automatically created during the first run
+- The system will run in the background, ensuring single instance operation through PID files
+
+## Version History
+
+- v0.2: Implemented core features
