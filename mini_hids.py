@@ -68,6 +68,28 @@ WEBSHELL_PATTERNS = [
     r'\$\_FILES\[.*\]\[\'tmp_name\'\]'
 ]
 
+# 预编译正则表达式
+COMPILED_WEBSHELL_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in WEBSHELL_PATTERNS]
+
+# Web攻击特征
+WEB_ATTACK_PATTERNS = [
+    r'\' OR\s+',
+    r'UNION\s+SELECT',
+    r'<script>',
+    r'javascript:',
+    r'../',
+    r'\.\./'
+]
+
+# 预编译Web攻击特征
+COMPILED_WEB_ATTACK_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in WEB_ATTACK_PATTERNS]
+
+# SSH失败匹配规则
+SSH_FAILURE_PATTERN = re.compile(r'Failed password for .* from (\S+)')
+
+# IP提取规则
+IP_EXTRACT_PATTERN = re.compile(r'(\S+) - - \[')
+
 # 全局变量
 ai_cooldown_times = {}
 ban_times = {}
@@ -78,6 +100,13 @@ ip_failures = {}
 ai_analysis_queue = deque(maxlen=CONFIG["MAX_QUEUE_SIZE"])
 # AI分析队列锁
 ai_queue_lock = threading.Lock()
+
+# Webshell扫描相关
+last_scan_time = 0
+# 存储文件修改时间的字典
+file_modification_times = {}
+# 扫描间隔（秒）
+WEBSHELL_SCAN_INTERVAL = 3600
 
 
 def setup_environment():
@@ -188,13 +217,17 @@ def validate_ip(ip):
 
 def detect_firewall():
     """检测防火墙类型"""
-    if os.system("which iptables > /dev/null 2>&1") == 0:
-        return "iptables"
-    elif os.system("which nftables > /dev/null 2>&1") == 0:
-        return "nftables"
-    elif os.system("which fail2ban-server > /dev/null 2>&1") == 0:
-        return "fail2ban"
-    else:
+    import subprocess
+    try:
+        if subprocess.run(["which", "iptables"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            return "iptables"
+        elif subprocess.run(["which", "nftables"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            return "nftables"
+        elif subprocess.run(["which", "fail2ban-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            return "fail2ban"
+        else:
+            return None
+    except Exception:
         return None
 
 
@@ -212,13 +245,20 @@ def ban_ip(ip, reason):
     add_to_blacklist(ip, reason)
     
     # 执行封禁命令
-    if firewall == "iptables":
-        os.system(f"iptables -A INPUT -s {ip} -j DROP")
-    elif firewall == "nftables":
-        os.system(f"nft add rule ip filter input ip saddr {ip} drop")
-    elif firewall == "fail2ban":
-        # 使用 fail2ban 封禁 IP
-        os.system(f"fail2ban-client set sshd banip {ip}")
+    import subprocess
+    try:
+        if firewall == "iptables":
+            subprocess.run(["iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"], 
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif firewall == "nftables":
+            subprocess.run(["nft", "add", "rule", "ip", "filter", "input", "ip", "saddr", ip, "drop"], 
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif firewall == "fail2ban":
+            # 使用 fail2ban 封禁 IP
+            subprocess.run(["fail2ban-client", "set", "sshd", "banip", ip], 
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as e:
+        log_alert(f"[错误] 执行防火墙命令失败: {e}")
     
     log_alert(f"[封禁] IP {ip} 因 {reason} 被封禁")
     
@@ -239,13 +279,20 @@ def unban_ip(ip):
     remove_from_blacklist(ip)
     
     # 执行解封命令
-    if firewall == "iptables":
-        os.system(f"iptables -D INPUT -s {ip} -j DROP")
-    elif firewall == "nftables":
-        os.system(f"nft delete rule ip filter input ip saddr {ip} drop")
-    elif firewall == "fail2ban":
-        # 使用 fail2ban 解封 IP
-        os.system(f"fail2ban-client set sshd unbanip {ip}")
+    import subprocess
+    try:
+        if firewall == "iptables":
+            subprocess.run(["iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"], 
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif firewall == "nftables":
+            subprocess.run(["nft", "delete", "rule", "ip", "filter", "input", "ip", "saddr", ip, "drop"], 
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif firewall == "fail2ban":
+            # 使用 fail2ban 解封 IP
+            subprocess.run(["fail2ban-client", "set", "sshd", "unbanip", ip], 
+                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as e:
+        log_alert(f"[错误] 执行防火墙命令失败: {e}")
     
     log_alert(f"[解封] IP {ip} 已自动解封")
     
@@ -311,7 +358,7 @@ def process_log_line(line, log_path):
 def detect_ssh_brute_force(line):
     """检测SSH暴力破解"""
     # 匹配SSH登录失败
-    match = re.search(r'Failed password for .* from (\S+)', line)
+    match = SSH_FAILURE_PATTERN.search(line)
     if match:
         ip = match.group(1)
         if not is_trusted_ip(ip) and validate_ip(ip):
@@ -353,19 +400,10 @@ def detect_ssh_brute_force(line):
 def detect_web_attack(line):
     """检测Web攻击"""
     # 匹配SQL注入、XSS等攻击特征
-    attack_patterns = [
-        r'\' OR\s+',
-        r'UNION\s+SELECT',
-        r'<script>',
-        r'javascript:',
-        r'../',
-        r'\.\./'
-    ]
-    
-    for pattern in attack_patterns:
-        if re.search(pattern, line, re.IGNORECASE):
+    for pattern in COMPILED_WEB_ATTACK_PATTERNS:
+        if pattern.search(line):
             # 提取IP
-            ip_match = re.search(r'(\S+) - - \[', line)
+            ip_match = IP_EXTRACT_PATTERN.search(line)
             if ip_match:
                 ip = ip_match.group(1)
                 if not is_trusted_ip(ip) and validate_ip(ip):
@@ -407,7 +445,15 @@ def detect_web_attack(line):
 
 
 def scan_webshell():
-    """扫描Webshell"""
+    """扫描Webshell（增量扫描）"""
+    global last_scan_time, file_modification_times
+    current_time = time.time()
+    
+    # 记录开始时间
+    scan_start_time = time.time()
+    scanned_files = 0
+    modified_files = 0
+    
     for web_root in CONFIG["WEB_ROOT"]:
         if not os.path.exists(web_root):
             continue
@@ -417,15 +463,32 @@ def scan_webshell():
                 if file.endswith(('.php', '.py', '.sh', '.jsp', '.asp', '.aspx')):
                     file_path = os.path.join(root, file)
                     try:
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                            content = f.read()
-                            for pattern in WEBSHELL_PATTERNS:
-                                if re.search(pattern, content, re.IGNORECASE):
-                                    log_alert(f"[Webshell] 检测到可疑文件: {file_path}")
-                                    # 这里可以添加更多处理逻辑，如隔离文件
-                                    break
+                        # 获取文件修改时间
+                        file_mtime = os.path.getmtime(file_path)
+                        
+                        # 检查文件是否被修改过
+                        if file_path not in file_modification_times or file_mtime > file_modification_times.get(file_path, 0):
+                            # 文件被修改，需要扫描
+                            modified_files += 1
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                for pattern in COMPILED_WEBSHELL_PATTERNS:
+                                    if pattern.search(content):
+                                        log_alert(f"[Webshell] 检测到可疑文件: {file_path}")
+                                        # 这里可以添加更多处理逻辑，如隔离文件
+                                        break
+                            # 更新文件修改时间
+                            file_modification_times[file_path] = file_mtime
+                        scanned_files += 1
                     except Exception as e:
                         pass
+    
+    # 更新上次扫描时间
+    last_scan_time = current_time
+    
+    # 记录扫描统计信息
+    scan_duration = time.time() - scan_start_time
+    log_alert(f"[Webshell扫描] 完成扫描，共扫描 {scanned_files} 个文件，其中 {modified_files} 个是修改过的文件，耗时 {scan_duration:.2f} 秒")
 
 
 def check_ai_analysis(ip, attack_type, log_line):
@@ -502,8 +565,21 @@ def process_ai_analysis_queue():
 def parse_ai_strategy(raw_ai_response):
     """[安全核心] 解析AI返回的防御策略，严禁执行eval()或直接sh运行"""
     try:
-        # 假设AI返回JSON: {"action": "block", "target": "IP|SUBNET", "value": "1.2.3.4", "duration": 3600}
-        strategy = json.loads(raw_ai_response)
+        # 清理响应内容
+        response = raw_ai_response.strip()
+        
+        # 尝试提取Markdown代码块中的JSON
+        code_block_match = re.search(r'```json\n(.*?)\n```', response, re.DOTALL)
+        if code_block_match:
+            response = code_block_match.group(1).strip()
+        
+        # 尝试提取任何代码块中的JSON
+        code_match = re.search(r'```(.*?)```', response, re.DOTALL)
+        if code_match:
+            response = code_match.group(1).strip()
+        
+        # 解析JSON
+        strategy = json.loads(response)
         return strategy
     except Exception as e:
         log_alert(f"[AI策略解析失败] {e}，降级为单IP封禁")
@@ -598,16 +674,27 @@ def analyze_with_ai(context):
         model = LLM_CONFIG["MODEL_NAME"]
         
         # 解析URL
-        if base_url.startswith('https://'):
-            base_url = base_url[8:]
+        import urllib.parse
         
-        # 检查URL格式
-        if '/' not in base_url:
-            log_alert("[AI分析] URL格式不正确，跳过AI分析")
-            return
+        # 确保URL有协议
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = 'https://' + base_url
         
-        host, path = base_url.split('/', 1)
-        path = f"/{path}/chat/completions"
+        # 解析URL
+        parsed_url = urllib.parse.urlparse(base_url)
+        host = parsed_url.netloc
+        path = parsed_url.path
+        
+        # 构建完整的API路径
+        if not path.endswith('/chat/completions'):
+            if path.endswith('/'):
+                path += 'chat/completions'
+            else:
+                path += '/chat/completions'
+        
+        # 确保path以/开头
+        if not path.startswith('/'):
+            path = '/' + path
         
         # 构建请求体
         payload = {
@@ -700,8 +787,8 @@ def main():
             # 检查封禁过期
             check_ban_expiry()
             
-            # 每60秒重新扫描Webshell
-            time.sleep(60)
+            # 每3600秒重新扫描Webshell
+            time.sleep(WEBSHELL_SCAN_INTERVAL)
             scan_webshell()
             
     except KeyboardInterrupt:

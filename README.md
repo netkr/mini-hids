@@ -44,12 +44,18 @@ Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on P
 ## Core Features
 
 - **Real-time Log Monitoring**: Supports `tail -F` logic, based on Inode monitoring to achieve log rotation compatibility
+- **Sliding Window Counter**: Uses sliding window algorithm to detect slow brute force attacks
+- **Dual-track Defense**: Fast track (immediate blocking) and intelligent track (AI analysis)
 - **Brute Force Attack Detection**: Automatically detects SSH brute force attacks and blocks malicious IPs
 - **Web Attack Detection**: Detects SQL injection, XSS and other web attacks
-- **Webshell Scanning**: Deep recursive scanning of web root directories, matching high-risk fingerprints
+- **Webshell Scanning**: Incremental scanning of web root directories, reducing I/O load
 - **AI Intelligent Analysis**: Integrates large model analysis capabilities to provide professional security recommendations
 - **Dynamic Blocking**: Supports setting blocking time, automatically unblocks after expiration
 - **Whitelist Exemption**: Ensures administrator IPs are never intercepted
+- **State Persistence**: Uses SQLite database to store ban times, ensuring rules persist after system restart
+- **Webhook Integration**: Supports sending alerts to external systems via webhook
+- **Regular Expression Pre-compilation**: Improves performance by pre-compiling all regex patterns
+- **Secure Command Execution**: Uses subprocess.run() for secure firewall command execution
 
 ## Quick Start
 
@@ -138,4 +144,15 @@ Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on P
 
 ## Version History
 
+- v1.0: Major optimization and enhancement
+  - Implemented sliding window counter for slow brute force detection
+  - Added dual-track defense system (fast track + intelligent track)
+  - Enhanced AI strategy parsing with Markdown code block support
+  - Implemented incremental Webshell scanning to reduce I/O load
+  - Optimized regex performance with pre-compilation
+  - Improved command execution security with subprocess.run()
+  - Enhanced API URL parsing with urllib.parse
+  - Added state persistence using SQLite database
+  - Added Webhook integration for external alerting
+  - Added comprehensive security and permissions documentation
 - v0.2: Implemented core features
