@@ -1,7 +1,15 @@
 # Lightweight Host Intrusion Detection and Log Analysis System (Mini-HIDS)
 
-![Image 1](/images/1.png)
-![Image 2](/images/2.png)
+<table>
+  <tr>
+    <td style="padding: 10px;">
+      <img src="images/1.png" alt="Image 1" style="width: 100%; max-width: 400px;">
+    </td>
+    <td style="padding: 10px;">
+      <img src="images/2.png" alt="Image 2" style="width: 100%; max-width: 400px;">
+    </td>
+  </tr>
+</table>
 
 
 
