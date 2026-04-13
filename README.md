@@ -1,4 +1,4 @@
-# Lightweight Host Intrusion Detection and Log Analysis System (Mini-HIDS)
+# Mini-HIDS
 
 <table>
   <tr>
@@ -11,177 +11,139 @@
   </tr>
 </table>
 
+#### [中文文档](/README_zh.md)
 
+Mini-HIDS is a lightweight Linux host intrusion detection tool built with the Python standard library. It is designed for small servers that need straightforward brute-force detection, basic web attack detection, incremental webshell scanning, and a scriptable JSON CLI.
 
-####  [中文文档](/README_zh.md)
+## Architecture
 
-## Security and Permissions
+- `mini_hids.py`: background daemon that tails logs, tracks attack windows, manages automatic blocking, and runs periodic webshell scans
+- `hids_cli.py`: control-plane CLI for agents or operators, always returns JSON
+- `hids_common.py`: shared configuration, SQLite persistence, IP validation, and firewall backend helpers
+- `config.json`: runtime configuration loaded by both the daemon and the CLI
 
-### Why Root Privileges Are Needed
-- **Firewall Management**: Root privileges are required to execute firewall commands (iptables, nftables, or fail2ban) to block and unblock malicious IPs
-- **Log Access**: Some system log files (e.g., /var/log/auth.log) require root access to read
-- **System Monitoring**: Access to system information (e.g., /proc/loadavg) may require elevated privileges
+## What Changed In v1.1
 
-### API Key Handling
-- **Optional Configuration**: API Key is optional - the system can run without AI analysis capabilities
-- **Security Recommendation**: Use environment variables to store API Key instead of hardcoding it in the Python file
-  ```bash
-  # Example: Set environment variables
-  export MINI_HIDS_API_KEY="sk-xxxxxxxxxxxxxxxx"
-  export MINI_HIDS_BASE_URL="https://api.your-provider.com/v1"
-  
-  # Then modify mini_hids.py to use environment variables
-  import os
-  LLM_CONFIG = {
-      "API_KEY": os.environ.get("MINI_HIDS_API_KEY", ""),
-      "BASE_URL": os.environ.get("MINI_HIDS_BASE_URL", ""),
-      "MODEL_NAME": "gpt-4-turbo",
-      "ENABLED": bool(os.environ.get("MINI_HIDS_API_KEY", "")),
-      "COOLDOWN_MINUTES": 60
-  }
-  ```
-- **File Permissions**: Ensure configuration files have permissions set to `600` to prevent API Key leakage
+- `config.json` is now actually loaded and merged with built-in defaults
+- daemon and CLI now share the same config, database, and firewall logic
+- firewall detection now correctly recognizes `nft`
+- ban and unban operations are idempotent for the database path and do not intentionally duplicate `iptables` rules
+- the daemon checks expiry on a short interval instead of sleeping for a full scan window
+- expired blacklist records are cleaned automatically
+- runtime files such as `blacklist.db`, `hids_alert.log`, and `mini_hids.pid` resolve relative to the project directory when configured with relative paths
 
-### System Paths Accessed
-- **Log Files**: /var/log/auth.log, /var/log/secure, /var/log/nginx/access.log, /var/log/apache2/access.log, /var/log/mysql/mysql.log, /var/log/mysql/error.log
-- **System Information**: /proc/loadavg
-- **Web Directories**: /var/www/html, /var/www (for Webshell scanning)
-- **Local Files**: hids_alert.log, blacklist.db, mini_hids.pid
+## Features
 
-## Project Introduction
+- Real-time log tailing with log rotation awareness
+- Sliding-window detection for slow SSH brute-force attempts
+- Pattern-based web attack detection for access logs
+- Incremental webshell scanning for common script file types
+- Automatic ban expiry handling
+- SQLite-backed state persistence
+- JSON CLI for status, alerts, blacklist inspection, manual ban, and manual unban
+- Support for `iptables`, `nftables`, and `fail2ban`
 
-Mini-HIDS is a zero-dependency, intelligent Linux server defense tool based on Python native libraries. It uses a C/S (Client/Server) architecture to achieve minute-level handling capabilities for brute force attacks and Webshells.
+## Requirements
 
-**Architecture Overview**
-- **mini_hids.py** (Data Plane / Background Daemon): Runs 7×24 hours, responsible for underlying monitoring and automatic defense
-- **hids_cli.py** (Control Plane / Agent-specific Interface): Command-line tool for Agent calls, returns standard JSON format immediately after execution
+- Python 3.6+
+- Linux
+- Root privileges for firewall operations and protected log access
+- One supported firewall backend:
+  - `iptables`
+  - `nft`
+  - `fail2ban-client`
 
-**Installation Methods**
-1. **Traditional deployment**: Deploy to a cloud server via git, run the daemon and use the CLI tool for management
-2. **Agent integration**: Send the project link to an agent (such as openclaw, hermes agent), and tell it to "package this project into a skill" and authorize it;
+## Configuration
 
-## Core Features
+Edit `config.json` instead of modifying the Python files.
 
-- **Real-time Log Monitoring**: Supports `tail -F` logic, based on Inode monitoring to achieve log rotation compatibility
-- **Sliding Window Counter**: Uses sliding window algorithm to detect slow brute force attacks
-- **Dual-track Defense**: Fast track (immediate blocking) and intelligent track (AI analysis)
-- **Brute Force Attack Detection**: Automatically detects SSH brute force attacks and blocks malicious IPs
-- **Web Attack Detection**: Detects SQL injection, XSS and other web attacks
-- **Webshell Scanning**: Incremental scanning of web root directories, reducing I/O load
-- **AI Intelligent Analysis**: Integrates large model analysis capabilities to provide professional security recommendations
-- **Dynamic Blocking**: Supports setting blocking time, automatically unblocks after expiration
-- **Whitelist Exemption**: Ensures administrator IPs are never intercepted
-- **State Persistence**: Uses SQLite database to store ban times, ensuring rules persist after system restart
-- **Webhook Integration**: Supports sending alerts to external systems via webhook
-- **Regular Expression Pre-compilation**: Improves performance by pre-compiling all regex patterns
-- **Secure Command Execution**: Uses subprocess.run() for secure firewall command execution
+```json
+{
+  "LOG_PATHS": {
+    "auth": ["/var/log/auth.log", "/var/log/secure"],
+    "web": ["/var/log/nginx/access.log", "/var/log/apache2/access.log"],
+    "mysql": ["/var/log/mysql/mysql.log", "/var/log/mysql/error.log"]
+  },
+  "BAN_TIME": 3600,
+  "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],
+  "WEB_ROOT": ["/var/www/html", "/var/www"],
+  "BLACKLIST_DB": "blacklist.db",
+  "ALERT_LOG": "hids_alert.log",
+  "PID_FILE": "mini_hids.pid",
+  "MAX_FAILURES": 5,
+  "WINDOW_SECONDS": 300,
+  "CHECK_INTERVAL": 1,
+  "WEBSHELL_SCAN_INTERVAL": 3600
+}
+```
+
+Notes:
+
+- `BLACKLIST_DB`, `ALERT_LOG`, and `PID_FILE` can be absolute paths. If they are relative, they are created in the project directory.
+- `CHECK_INTERVAL` controls how often the daemon checks for expired bans.
+- `WEBSHELL_SCAN_INTERVAL` controls how often the daemon rescans web roots.
+- `TRUSTED_IPS` are never banned by the daemon or the CLI.
 
 ## Quick Start
 
-### Environment Requirements
+```bash
+git clone https://github.com/netkr/mini-hids.git
+cd mini-hids
+```
 
-- Python 3.6+
-- Linux system
-- Firewall (iptables, nftables, or fail2ban)
+Adjust `config.json`, then start the daemon:
 
-### Installation and Running
+```bash
+sudo python3 mini_hids.py
+```
 
-1. **Clone the project**
-   ```bash
-   git clone https://github.com/netkr/mini-hids.git
-   cd mini-hids
-   ```
+Use the CLI:
 
-2. **Modify system configuration**
-   Edit the `mini_hids.py` file, adjust the configuration according to your server environment:
-   ```python
-   CONFIG = {
-       "LOG_PATHS": {
-           "auth": ["/var/log/auth.log", "/var/log/secure"],
-           "web": ["/var/log/nginx/access.log", "/var/log/apache2/access.log"],
-           "mysql": ["/var/log/mysql/mysql.log", "/var/log/mysql/error.log"]
-       },
-       "BAN_TIME": 3600,  # 封禁时间（秒）
-       "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],  # 白名单IP
-       "WEB_ROOT": ["/var/www/html", "/var/www"],  # Web根目录
-       "BLACKLIST_DB": "blacklist.db",
-       "ALERT_LOG": "hids_alert.log",
-       "MAX_FAILURES": 5,  # 最大失败次数
-       "WINDOW_SECONDS": 300,  # 滑动窗口时间（秒）
-   }
-   ```
+```bash
+python3 hids_cli.py --action status
+python3 hids_cli.py --action get_alerts --lines 20
+python3 hids_cli.py --action get_blacklist
+python3 hids_cli.py --action ban --ip 192.168.1.100 --reason "manual ban"
+python3 hids_cli.py --action unban --ip 192.168.1.100
+```
 
-3. **Run the background daemon**
-   ```bash
-   sudo python3 mini_hids.py
-   ```
+## CLI Output
 
-4. **Use the CLI tool**
-   ```bash
-   # Check system status
-   python3 hids_cli.py --action status
-   
-   # Get recent alerts
-   python3 hids_cli.py --action get_alerts --lines 20
-   
-   # Get current blacklist
-   python3 hids_cli.py --action get_blacklist
-   
-   # Manually ban an IP
-   python3 hids_cli.py --action ban --ip 192.168.1.100 --reason "Manual ban"
-   
-   # Manually unban an IP
-   python3 hids_cli.py --action unban --ip 192.168.1.100
-   ```
+All CLI commands return JSON. Example:
 
-## Configuration Instructions
+```json
+{
+  "success": true,
+  "data": {
+    "is_running": true,
+    "pid": 12345,
+    "firewall_backend": "iptables"
+  }
+}
+```
 
-### Core Configuration Items
+## Security Notes
 
-- **LOG_PATHS**: Paths to log files that need to be monitored
-- **BAN_TIME**: IP blocking time (seconds)
-- **TRUSTED_IPS**: Whitelist IP list
-- **WEB_ROOT**: Web root directory path, used for Webshell scanning
-- **BAN_TIME**: IP blocking time (seconds)
-- **MAX_FAILURES**: Maximum number of failures, exceeding this value will trigger blocking
+- Run the daemon as root if you need firewall enforcement or access to privileged logs.
+- Keep `config.json` permissions restrictive if you add sensitive paths or future secrets.
+- Review `TRUSTED_IPS` carefully to avoid locking out legitimate operators.
+- Web attack and webshell detection are heuristic. Treat alerts as signals, not final verdicts.
 
-### AI Configuration Items
+## Limitations
 
-- **API_KEY**: Large model API key
-- **BASE_URL**: Large model API address
-- **MODEL_NAME**: Model name used
-- **ENABLED**: Whether to enable AI analysis
-- **COOLDOWN_MINUTES**: AI analysis cooldown time (minutes)
+- Detection is regex-based and intentionally simple.
+- The project does not yet ship with systemd service files or automated tests.
+- `nftables` support is implemented through a dedicated `mini_hids` table and timeout-enabled sets, so existing custom firewall policies should still be reviewed before production use.
 
-## Logs and Alerts
+## Runtime Files
 
-- **hids_alert.log**: System alert logs
-- **blacklist.db**: Blacklist database
+- `blacklist.db`: SQLite state store
+- `hids_alert.log`: alert log
+- `mini_hids.pid`: daemon PID file
 
-## Security Recommendations
+## Recommended Next Steps
 
-1. **Permission Settings**: Ensure configuration file permissions are `600` to prevent API Key leakage
-2. **Regular Updates**: Regularly update the Webshell signature database
-3. **Whitelist Management**: Properly configure whitelist to avoid false blocking
-4. **Monitoring Frequency**: Adjust monitoring frequency based on server load
-
-## Notes
-
-- This system requires root privileges to run in order to execute firewall commands
-- Necessary directories and files will be automatically created during the first run
-- The system will run in the background, ensuring single instance operation through PID files
-
-## Version History
-
-- v1.0: Major optimization and enhancement
-  - Implemented sliding window counter for slow brute force detection
-  - Added dual-track defense system (fast track + intelligent track)
-  - Enhanced AI strategy parsing with Markdown code block support
-  - Implemented incremental Webshell scanning to reduce I/O load
-  - Optimized regex performance with pre-compilation
-  - Improved command execution security with subprocess.run()
-  - Enhanced API URL parsing with urllib.parse
-  - Added state persistence using SQLite database
-  - Added Webhook integration for external alerting
-  - Added comprehensive security and permissions documentation
-- v0.2: Implemented core features
+- Add replayable sample logs and regression tests
+- Add a systemd unit and logrotate examples
+- Extend web attack patterns with per-service profiles
+- Add structured alert delivery such as webhook or syslog forwarding

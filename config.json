@@ -1,14 +1,17 @@
 {
-    "LOG_PATHS": {
-        "auth": ["/var/log/auth.log", "/var/log/secure"],
-        "web": ["/var/log/nginx/access.log", "/var/log/apache2/access.log"],
-        "mysql": ["/var/log/mysql/mysql.log", "/var/log/mysql/error.log"]
-    },
-    "BAN_TIME": 3600,
-    "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],
-    "WEB_ROOT": ["/var/www/html", "/var/www"],
-    "BLACKLIST_DB": "blacklist.db",
-    "ALERT_LOG": "hids_alert.log",
-    "MAX_FAILURES": 5,
-    "CHECK_INTERVAL": 1
+  "LOG_PATHS": {
+    "auth": ["/var/log/auth.log", "/var/log/secure"],
+    "web": ["/var/log/nginx/access.log", "/var/log/apache2/access.log"],
+    "mysql": ["/var/log/mysql/mysql.log", "/var/log/mysql/error.log"]
+  },
+  "BAN_TIME": 3600,
+  "TRUSTED_IPS": ["127.0.0.1", "192.168.1.1"],
+  "WEB_ROOT": ["/var/www/html", "/var/www"],
+  "BLACKLIST_DB": "blacklist.db",
+  "ALERT_LOG": "hids_alert.log",
+  "PID_FILE": "mini_hids.pid",
+  "MAX_FAILURES": 5,
+  "WINDOW_SECONDS": 300,
+  "CHECK_INTERVAL": 1,
+  "WEBSHELL_SCAN_INTERVAL": 3600
 }
