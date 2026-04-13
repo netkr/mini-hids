@@ -1,5 +1,12 @@
 # Lightweight Host Intrusion Detection and Log Analysis System (Mini-HIDS)
 
+![Image 1](/images/1.png)
+![Image 2](/images/2.png)
+
+
+
+####  [中文文档](/README_zh.md)
+
 ## Security and Permissions
 
 ### Why Root Privileges Are Needed
