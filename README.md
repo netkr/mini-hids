@@ -181,3 +181,13 @@ Notes:
 - Improved log tailing robustness with log rotation handling
 - Normalized runtime file paths for blacklist.db, hids_alert.log, and mini_hids.pid
 - Added JSON CLI for status, alerts, blacklist inspection, manual ban, and unban
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=netkr%2Fmini-hids&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=netkr/mini-hids&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=netkr/mini-hids&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=netkr/mini-hids&type=date&legend=top-left" />
+ </picture>
+</a>
