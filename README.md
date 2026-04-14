@@ -1,47 +1,117 @@
 # Mini-HIDS
 
-<table>
-  <tr>
-    <td style="padding: 10px;">
-      <img src="images/1.png" alt="Image 1" style="width: 100%; max-width: 400px;">
-    </td>
-    <td style="padding: 10px;">
-      <img src="images/2.png" alt="Image 2" style="width: 100%; max-width: 400px;">
-    </td>
-  </tr>
-</table>
+Stop brute-force IPs and suspicious web payloads on a small Linux server in minutes, without deploying a full SIEM or heavyweight EDR stack.
 
-#### [中文文档](/README_zh.md)
+![Mini-HIDS flow](images/mini-hids-flow.svg)
 
-Mini-HIDS is a lightweight Linux host intrusion detection tool built with the Python standard library. It is designed for small servers that need straightforward brute-force detection, basic web attack detection, incremental webshell scanning, and a scriptable JSON CLI.
+[中文文档](README_zh.md)
+
+Mini-HIDS is a lightweight Linux host intrusion detection tool built with the Python standard library. It focuses on three things that are easy to operationalize on small servers:
+
+- Detect repeated SSH login failures with a sliding time window
+- Detect obvious web attack payloads from access logs
+- Scan common script files for suspicious webshell patterns
+
+It also exposes both a JSON CLI and a minimal MCP server, so AI agents can inspect status, read alerts, query the blacklist, and trigger ban or unban actions through a standard tool interface.
+
+## Why This Exists
+
+Most open-source security tools are optimized for human operators first. Mini-HIDS is intentionally small enough to understand quickly, script easily, and embed into agent workflows without a large control plane.
+
+This repository is a good fit if you want:
+
+- A single-host defensive tool for VPS or small Linux fleets
+- A JSON-first CLI for automation and agent usage
+- Simple, inspectable detection logic instead of opaque pipelines
+- A local MCP tool server that IDE agents can call directly
+
+This repository is not a good fit if you need:
+
+- Cross-host correlation or centralized SOC workflows
+- Kernel telemetry, eBPF, or endpoint prevention
+- High-fidelity detection engineering with low false positives
 
 ## Architecture
 
-- `mini_hids.py`: background daemon that tails logs, tracks attack windows, manages automatic blocking, and runs periodic webshell scans
-- `hids_cli.py`: control-plane CLI for agents or operators, always returns JSON
-- `hids_common.py`: shared configuration, SQLite persistence, IP validation, and firewall backend helpers
+- `mini_hids.py`: long-running daemon that tails logs, tracks attack windows, bans IPs, and rescans web roots
+- `hids_cli.py`: JSON-only control-plane CLI for operators and agents
+- `hids_common.py`: shared config loading, SQLite helpers, IP validation, and firewall backends
+- `mcp_server.py`: stdio MCP adapter that exposes Mini-HIDS actions as agent-callable tools
 - `config.json`: runtime configuration loaded by both the daemon and the CLI
+- `llms.txt`: LLM-oriented project map for AI search and coding assistants
 
-## What Changed In v1.1
+## Quick Start
 
-- `config.json` is now actually loaded and merged with built-in defaults
-- daemon and CLI now share the same config, database, and firewall logic
-- firewall detection now correctly recognizes `nft`
-- ban and unban operations are idempotent for the database path and do not intentionally duplicate `iptables` rules
-- the daemon checks expiry on a short interval instead of sleeping for a full scan window
-- expired blacklist records are cleaned automatically
-- runtime files such as `blacklist.db`, `hids_alert.log`, and `mini_hids.pid` resolve relative to the project directory when configured with relative paths
+```bash
+git clone https://github.com/netkr/mini-hids.git
+cd mini-hids
+```
 
-## Features
+Adjust `config.json`, then start the daemon:
 
-- Real-time log tailing with log rotation awareness
-- Sliding-window detection for slow SSH brute-force attempts
-- Pattern-based web attack detection for access logs
-- Incremental webshell scanning for common script file types
-- Automatic ban expiry handling
-- SQLite-backed state persistence
-- JSON CLI for status, alerts, blacklist inspection, manual ban, and manual unban
-- Support for `iptables`, `nftables`, and `fail2ban`
+```bash
+sudo python3 mini_hids.py
+```
+
+Use the JSON CLI:
+
+```bash
+python3 hids_cli.py --action status
+python3 hids_cli.py --action get_alerts --lines 20
+python3 hids_cli.py --action get_blacklist
+python3 hids_cli.py --action ban --ip 192.168.1.100 --reason "manual ban"
+python3 hids_cli.py --action unban --ip 192.168.1.100
+```
+
+## Use With AI Agents
+
+Mini-HIDS now ships with a local MCP server. That means tools like Cursor, Claude Desktop, and other MCP-compatible clients can call the project directly instead of shelling out ad hoc.
+
+Run the MCP server:
+
+```bash
+python3 mcp_server.py
+```
+
+Example client config:
+
+```json
+{
+  "mcpServers": {
+    "mini-hids": {
+      "command": "python3",
+      "args": ["/absolute/path/to/mini-hids/mcp_server.py"]
+    }
+  }
+}
+```
+
+A ready-to-copy sample is also included at [`examples/claude_desktop_mcp.json`](examples/claude_desktop_mcp.json).
+
+Available MCP tools:
+
+- `mini_hids_status`
+- `mini_hids_get_alerts`
+- `mini_hids_get_blacklist`
+- `mini_hids_ban_ip`
+- `mini_hids_unban_ip`
+
+This is the practical replacement for a fake "one-click deploy" button. Mini-HIDS needs local log access and firewall privileges, so local or server-side MCP integration is the correct deployment model.
+
+## CLI Output
+
+All CLI commands return JSON. Example:
+
+```json
+{
+  "success": true,
+  "data": {
+    "is_running": true,
+    "pid": 12345,
+    "firewall_backend": "iptables"
+  }
+}
+```
 
 ## Requirements
 
@@ -84,66 +154,22 @@ Notes:
 - `WEBSHELL_SCAN_INTERVAL` controls how often the daemon rescans web roots.
 - `TRUSTED_IPS` are never banned by the daemon or the CLI.
 
-## Quick Start
-
-```bash
-git clone https://github.com/netkr/mini-hids.git
-cd mini-hids
-```
-
-Adjust `config.json`, then start the daemon:
-
-```bash
-sudo python3 mini_hids.py
-```
-
-Use the CLI:
-
-```bash
-python3 hids_cli.py --action status
-python3 hids_cli.py --action get_alerts --lines 20
-python3 hids_cli.py --action get_blacklist
-python3 hids_cli.py --action ban --ip 192.168.1.100 --reason "manual ban"
-python3 hids_cli.py --action unban --ip 192.168.1.100
-```
-
-## CLI Output
-
-All CLI commands return JSON. Example:
-
-```json
-{
-  "success": true,
-  "data": {
-    "is_running": true,
-    "pid": 12345,
-    "firewall_backend": "iptables"
-  }
-}
-```
-
 ## Security Notes
 
 - Run the daemon as root if you need firewall enforcement or access to privileged logs.
-- Keep `config.json` permissions restrictive if you add sensitive paths or future secrets.
-- Review `TRUSTED_IPS` carefully to avoid locking out legitimate operators.
+- Review `TRUSTED_IPS` carefully to avoid locking yourself out.
 - Web attack and webshell detection are heuristic. Treat alerts as signals, not final verdicts.
+- MCP clients should be treated as privileged local integrations, since they can trigger ban and unban operations.
 
 ## Limitations
 
 - Detection is regex-based and intentionally simple.
-- The project does not yet ship with systemd service files or automated tests.
-- `nftables` support is implemented through a dedicated `mini_hids` table and timeout-enabled sets, so existing custom firewall policies should still be reviewed before production use.
+- The project does not yet ship with automated tests or service packaging.
+- `nftables` support uses a dedicated `mini_hids` table and timeout-enabled sets, so existing firewall policies should still be reviewed before production use.
 
-## Runtime Files
-
-- `blacklist.db`: SQLite state store
-- `hids_alert.log`: alert log
-- `mini_hids.pid`: daemon PID file
-
-## Recommended Next Steps
+## Roadmap
 
 - Add replayable sample logs and regression tests
-- Add a systemd unit and logrotate examples
-- Extend web attack patterns with per-service profiles
-- Add structured alert delivery such as webhook or syslog forwarding
+- Add `systemd` and `logrotate` examples
+- Add webhook or syslog alert forwarding
+- Add a packaged Dify/OpenClaw style plugin wrapper if a stable plugin target is chosen

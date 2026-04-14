@@ -1,0 +1,48 @@
+# Mini-HIDS
+
+> Mini-HIDS is a lightweight Linux host intrusion detection tool for small servers. It monitors auth and web logs, tracks repeated failures in a sliding window, scans web roots for suspicious script patterns, stores ban state in SQLite, and exposes both a JSON CLI and an MCP tool server for agent workflows.
+
+Mini-HIDS is optimized for local or single-host deployments where simple detection, understandable code, and scriptable operations matter more than large-platform features.
+
+When using this repository, treat `mini_hids.py` as the data-plane daemon, `hids_cli.py` as the operator and agent control plane, and `mcp_server.py` as the interface layer for MCP-compatible AI clients.
+
+Important behavior:
+
+- Firewall actions require Linux plus a supported backend: `iptables`, `nft`, or `fail2ban-client`
+- Runtime state is persisted in `blacklist.db`
+- Relative runtime paths are resolved relative to the project directory
+- Detection is heuristic and regex-based, not a full IDS or EDR platform
+- MCP integrations should be treated as privileged local tools
+
+## Key Files
+
+- [README.md](README.md): English overview, quick start, MCP usage, and operational notes
+- [README_zh.md](README_zh.md): Chinese overview and operator guidance
+- [mini_hids.py](mini_hids.py): Long-running daemon for log monitoring, auto-ban, and webshell scanning
+- [hids_cli.py](hids_cli.py): JSON CLI for status, alerts, blacklist, ban, and unban operations
+- [hids_common.py](hids_common.py): Shared config loading, SQLite persistence, and firewall backends
+- [config.json](config.json): Runtime configuration for log paths, trust list, scan intervals, and file locations
+- [mcp_server.py](mcp_server.py): MCP stdio server exposing Mini-HIDS as AI-callable tools
+
+## Core APIs
+
+- `python3 mini_hids.py`: start the daemon
+- `python3 hids_cli.py --action status`: return daemon and backend status as JSON
+- `python3 hids_cli.py --action get_alerts --lines N`: return recent alerts as JSON
+- `python3 hids_cli.py --action get_blacklist`: return active blacklist entries as JSON
+- `python3 hids_cli.py --action ban --ip <IP> --reason "<TEXT>"`: ban an IP
+- `python3 hids_cli.py --action unban --ip <IP>`: unban an IP
+- `python3 mcp_server.py`: expose Mini-HIDS tools over stdio MCP
+
+## Usage Scenarios
+
+- Protecting a small VPS against brute-force SSH attempts
+- Giving an AI coding assistant a safe, explicit interface for security checks on a Linux host
+- Embedding lightweight host monitoring into an operations or incident-response workflow
+- Demonstrating how to convert a simple CLI security project into an AI-readable and AI-callable repository
+
+## Limitations
+
+- Linux-only in practice because of log and firewall assumptions
+- No built-in service unit, packaging, or automated tests yet
+- No central dashboard, multi-host coordination, or advanced telemetry

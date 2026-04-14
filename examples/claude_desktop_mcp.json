@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mini-hids": {
+      "command": "python3",
+      "args": [
+        "/absolute/path/to/mini-hids/mcp_server.py"
+      ]
+    }
+  }
+}

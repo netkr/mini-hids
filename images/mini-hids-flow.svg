@@ -1,0 +1,85 @@
+<svg width="1200" height="480" viewBox="0 0 1200 480" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Mini-HIDS animated architecture overview</title>
+  <desc id="desc">Animated diagram showing logs flowing into Mini-HIDS, then into SQLite, firewall actions, and MCP or CLI consumers.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#09131f"/>
+      <stop offset="1" stop-color="#10273f"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#12314f"/>
+      <stop offset="1" stop-color="#0f2237"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#29c7ac"/>
+      <stop offset="1" stop-color="#f3c969"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#04101b" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="480" rx="28" fill="url(#bg)"/>
+  <circle cx="1030" cy="92" r="120" fill="#183455" opacity="0.18"/>
+  <circle cx="182" cy="404" r="96" fill="#2AC4AF" opacity="0.08"/>
+
+  <g filter="url(#shadow)">
+    <rect x="70" y="116" width="212" height="248" rx="24" fill="url(#panel)" stroke="#29557E"/>
+    <rect x="344" y="76" width="304" height="328" rx="28" fill="url(#panel)" stroke="#2D668D"/>
+    <rect x="716" y="76" width="190" height="144" rx="24" fill="url(#panel)" stroke="#2D668D"/>
+    <rect x="716" y="260" width="190" height="144" rx="24" fill="url(#panel)" stroke="#2D668D"/>
+    <rect x="962" y="76" width="168" height="144" rx="24" fill="url(#panel)" stroke="#2D668D"/>
+    <rect x="962" y="260" width="168" height="144" rx="24" fill="url(#panel)" stroke="#2D668D"/>
+  </g>
+
+  <text x="102" y="160" fill="#F4F7FB" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Log Sources</text>
+  <text x="102" y="202" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">auth.log</text>
+  <text x="102" y="236" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">nginx access.log</text>
+  <text x="102" y="270" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">apache access.log</text>
+  <text x="102" y="304" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">web roots</text>
+
+  <text x="382" y="134" fill="#F4F7FB" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700">Mini-HIDS</text>
+  <text x="382" y="176" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">Sliding-window SSH detection</text>
+  <text x="382" y="210" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">Web attack pattern matching</text>
+  <text x="382" y="244" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">Incremental webshell scan</text>
+  <text x="382" y="278" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">SQLite-backed blacklist</text>
+  <text x="382" y="312" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="20">JSON CLI + MCP tools</text>
+
+  <rect x="382" y="338" width="228" height="24" rx="12" fill="#143E57"/>
+  <rect x="382" y="338" width="170" height="24" rx="12" fill="url(#accent)">
+    <animate attributeName="width" values="120;210;145;190;120" dur="4.5s" repeatCount="indefinite"/>
+  </rect>
+  <text x="382" y="386" fill="#7EDBC8" font-family="Segoe UI, Arial, sans-serif" font-size="16">small-server defensive workflow</text>
+
+  <text x="748" y="128" fill="#F4F7FB" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">SQLite State</text>
+  <text x="748" y="170" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">blacklist.db</text>
+  <text x="748" y="196" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">expiry times</text>
+
+  <text x="748" y="312" fill="#F4F7FB" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Firewall</text>
+  <text x="748" y="354" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">iptables</text>
+  <text x="748" y="380" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">nft / fail2ban</text>
+
+  <text x="992" y="128" fill="#F4F7FB" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">JSON CLI</text>
+  <text x="992" y="170" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">status</text>
+  <text x="992" y="196" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">alerts / blacklist</text>
+
+  <text x="992" y="312" fill="#F4F7FB" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">MCP Tools</text>
+  <text x="992" y="354" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">Cursor / Claude</text>
+  <text x="992" y="380" fill="#A9C4D8" font-family="Segoe UI, Arial, sans-serif" font-size="18">AI-callable security ops</text>
+
+  <path d="M282 240H344" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 16">
+    <animate attributeName="stroke-dashoffset" from="0" to="-60" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M648 148H716" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 16">
+    <animate attributeName="stroke-dashoffset" from="0" to="-60" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M648 332H716" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 16">
+    <animate attributeName="stroke-dashoffset" from="0" to="-60" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M906 148H962" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 16">
+    <animate attributeName="stroke-dashoffset" from="0" to="-60" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M906 332H962" stroke="url(#accent)" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 16">
+    <animate attributeName="stroke-dashoffset" from="0" to="-60" dur="2s" repeatCount="indefinite"/>
+  </path>
+</svg>
