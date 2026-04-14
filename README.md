@@ -167,9 +167,17 @@ Notes:
 - The project does not yet ship with automated tests or service packaging.
 - `nftables` support uses a dedicated `mini_hids` table and timeout-enabled sets, so existing firewall policies should still be reviewed before production use.
 
-## Roadmap
 
-- Add replayable sample logs and regression tests
-- Add `systemd` and `logrotate` examples
-- Add webhook or syslog alert forwarding
-- Add a packaged Dify/OpenClaw style plugin wrapper if a stable plugin target is chosen
+
+## v1.2 Release Notes
+
+- Unified runtime configuration loading from config.json with default merging
+- Added shared core module for config, firewall, IP validation, and blacklist persistence
+- Added SQLite-backed blacklist persistence with automatic recovery and expired-entry cleanup
+- Improved ban/unban idempotency and reduced risk of duplicate firewall rules
+- Fixed firewall backend detection, including proper nftables support
+- Improved daemon scheduling so ban expiry is checked on a short interval
+- Added incremental webshell scanning based on file modification time
+- Improved log tailing robustness with log rotation handling
+- Normalized runtime file paths for blacklist.db, hids_alert.log, and mini_hids.pid
+- Added JSON CLI for status, alerts, blacklist inspection, manual ban, and unban
