@@ -136,7 +136,7 @@ python3 mcp_server.py
 - Web 攻击和 Webshell 检测目前是启发式规则，告警更适合作为信号，而不是最终结论。
 - MCP 客户端应被视为本地高权限集成，因为它们可以触发封禁和解封动作。
 
-## v1.3 版本说明
+## v1.2 版本说明
 
 - 统一从 config.json 加载运行时配置，并支持默认值合并
 - 新增共享核心模块，统一处理配置、防火墙、IP 校验与黑名单持久化
@@ -147,4 +147,22 @@ python3 mcp_server.py
 - 新增基于文件修改时间的增量式 Webshell 扫描
 - 增强日志跟踪鲁棒性，支持日志轮转
 - 规范化运行时文件路径（blacklist.db、hids_alert.log、mini_hids.pid）
-- 重构为 Agent 原生架构，新增专用 MCP 控制面 API
+
+## v1.3 版本说明
+
+- 重构为 Agent 原生架构，移除人类 CLI 接口
+- 新增专用控制面 API 模块（`hids_core.py`），专供 MCP 和 Agent 集成使用
+- 删除 `hids_cli.py` 及其基于 argparse 的命令行接口
+- 更新 MCP 服务器，改为从控制面 API 模块导入
+- 简化项目结构，消除双模式（CLI + MCP）设计
+- 更新文档，体现 Agent 原生定位和 MCP 优先的工作流
+
+## v1.4 版本说明
+
+- 提取封禁/解封公共逻辑到 `hids_common.py`，消除代码重复
+- 新增 `validate_ban_request()`、`execute_ban()`、`execute_unban()` 共享函数
+- 新增结构化告警解析 `parse_alert_line()`，输出对 Agent 更友好
+- 新增 `mini_hids_scan_webshell` MCP 工具，支持按需触发 Webshell 扫描
+- 提取 `WEBSHELL_PATTERNS` 到共享模块，移除重复定义
+- 新增单元测试（`test_hids.py`），覆盖核心功能
+- 新增 systemd 服务文件（`mini-hids.service`），便于生产部署

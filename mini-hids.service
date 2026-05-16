@@ -1,0 +1,15 @@
+[Unit]
+Description=Mini-HIDS - Lightweight Host Intrusion Detection System
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/mini-hids/mini_hids.py
+WorkingDirectory=/opt/mini-hids
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -8,14 +8,19 @@ import os
 import time
 
 from hids_common import (
+    COMPILED_WEBSHELL_PATTERNS,
     FirewallManager,
     delete_blacklist_entry,
     detect_firewall,
+    execute_ban,
+    execute_unban,
     init_db,
     list_blacklist_rows,
     load_config,
+    parse_alert_line,
     purge_expired_blacklist_entries,
     upsert_blacklist_entry,
+    validate_ban_request,
     validate_ip,
 )
 
@@ -30,25 +35,13 @@ def ensure_runtime():
 
 
 def ban_ip(ip, reason):
-    if not validate_ip(ip):
-        return {"success": False, "message": f"无效的 IP 地址: {ip}"}
+    validation_error = validate_ban_request(ip, CONFIG["TRUSTED_IPS"], CONFIG["BLACKLIST_DB"])
+    if validation_error is not None:
+        return validation_error
 
-    if ip in CONFIG["TRUSTED_IPS"]:
-        return {"success": False, "message": f"IP {ip} 在白名单中，拒绝封禁"}
-
-    current_blacklist = {row[0]: row[1] for row in list_blacklist_rows(CONFIG["BLACKLIST_DB"])}
-    if current_blacklist.get(ip, 0) > int(time.time()):
-        return {"success": True, "message": f"IP {ip} 已在黑名单中"}
-
-    expiry_time = int(time.time() + CONFIG["BAN_TIME"])
     try:
-        FIREWALL.ban_ip(ip, CONFIG["BAN_TIME"])
-        upsert_blacklist_entry(CONFIG["BLACKLIST_DB"], ip, expiry_time, reason)
+        expiry_time = execute_ban(ip, reason, CONFIG["BAN_TIME"], FIREWALL, CONFIG["BLACKLIST_DB"])
     except Exception as exc:
-        try:
-            FIREWALL.unban_ip(ip)
-        except Exception:
-            pass
         return {"success": False, "message": f"封禁失败: {exc}"}
 
     return {
@@ -62,16 +55,13 @@ def unban_ip(ip):
     if not validate_ip(ip):
         return {"success": False, "message": f"无效的 IP 地址: {ip}"}
 
-    current_blacklist = {row[0]: row[1] for row in list_blacklist_rows(CONFIG["BLACKLIST_DB"])}
-    if ip not in current_blacklist:
-        delete_blacklist_entry(CONFIG["BLACKLIST_DB"], ip)
-        return {"success": True, "message": f"IP {ip} 当前不在黑名单中"}
-
     try:
-        FIREWALL.unban_ip(ip)
-        delete_blacklist_entry(CONFIG["BLACKLIST_DB"], ip)
+        was_banned = execute_unban(ip, FIREWALL, CONFIG["BLACKLIST_DB"])
     except Exception as exc:
         return {"success": False, "message": f"解封失败: {exc}"}
+
+    if not was_banned:
+        return {"success": True, "message": f"IP {ip} 当前不在黑名单中"}
 
     return {"success": True, "message": f"IP {ip} 已成功解封"}
 
@@ -110,7 +100,7 @@ def get_status():
     }
 
 
-def get_alerts(lines=10):
+def get_alerts(lines=10, structured=True):
     if lines <= 0:
         return {"success": False, "message": "lines 必须大于 0"}
 
@@ -119,7 +109,14 @@ def get_alerts(lines=10):
         if os.path.exists(CONFIG["ALERT_LOG"]):
             with open(CONFIG["ALERT_LOG"], "r", encoding="utf-8", errors="ignore") as alert_file:
                 recent_lines = alert_file.readlines()[-lines:]
-            alerts = [line.strip() for line in recent_lines if line.strip()]
+            for line in recent_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                if structured:
+                    alerts.append(parse_alert_line(line))
+                else:
+                    alerts.append(line)
     except Exception as exc:
         return {"success": False, "message": f"读取告警日志失败: {exc}"}
 
@@ -158,6 +155,52 @@ def get_blacklist():
         "data": {
             "blacklist": blacklist,
             "count": len(blacklist),
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    }
+
+
+def scan_webshell():
+    scan_start_time = time.time()
+    scanned_files = 0
+    suspicious_files = []
+
+    for web_root in CONFIG["WEB_ROOT"]:
+        if not os.path.exists(web_root):
+            continue
+
+        for root, _dirs, files in os.walk(web_root):
+            for file_name in files:
+                if not file_name.endswith((".php", ".py", ".sh", ".jsp", ".asp", ".aspx")):
+                    continue
+
+                file_path = os.path.join(root, file_name)
+                try:
+                    scanned_files += 1
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as source_file:
+                        content = source_file.read()
+
+                    matched_patterns = []
+                    for pattern in COMPILED_WEBSHELL_PATTERNS:
+                        if pattern.search(content):
+                            matched_patterns.append(pattern.pattern)
+
+                    if matched_patterns:
+                        suspicious_files.append({
+                            "file": file_path,
+                            "patterns": matched_patterns,
+                        })
+                except Exception:
+                    continue
+
+    scan_duration = time.time() - scan_start_time
+    return {
+        "success": True,
+        "data": {
+            "scanned_files": scanned_files,
+            "suspicious_files": suspicious_files,
+            "suspicious_count": len(suspicious_files),
+            "scan_duration": round(scan_duration, 2),
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         },
     }

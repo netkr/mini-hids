@@ -6,6 +6,7 @@ Mini-HIDS shared helpers.
 
 import json
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -296,3 +297,128 @@ class FirewallManager:
             return
 
         raise RuntimeError("no supported firewall backend found")
+
+
+WEBSHELL_PATTERNS = [
+    r"eval\(base64_decode\(",
+    r"proc_open\(",
+    r"shell_exec\(",
+    r"system\(",
+    r"passthru\(",
+    r"exec\(",
+    r"popen\(",
+    r"assert\(",
+    r"create_function\(",
+    r"array_map\(.*eval\(",
+    r"\$\_GET\[.*\]\(.*\)",
+    r"\$\_POST\[.*\]\(.*\)",
+    r"\$\_REQUEST\[.*\]\(.*\)",
+    r"file_put_contents\(.*\$\_",
+    r"fwrite\(.*\$\_",
+    r"\$\_FILES\[.*\]\['tmp_name'\]",
+]
+COMPILED_WEBSHELL_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in WEBSHELL_PATTERNS]
+
+
+def validate_ban_request(ip, trusted_ips, blacklist_db):
+    if not validate_ip(ip):
+        return {"success": False, "message": f"无效的 IP 地址: {ip}"}
+
+    if ip in trusted_ips:
+        return {"success": False, "message": f"IP {ip} 在白名单中，拒绝封禁"}
+
+    current_blacklist = {row[0]: row[1] for row in list_blacklist_rows(blacklist_db)}
+    if current_blacklist.get(ip, 0) > int(time.time()):
+        return {"success": True, "message": f"IP {ip} 已在黑名单中"}
+
+    return None
+
+
+def execute_ban(ip, reason, ban_time, firewall, blacklist_db):
+    expiry_time = int(time.time() + ban_time)
+    try:
+        firewall.ban_ip(ip, ban_time)
+        upsert_blacklist_entry(blacklist_db, ip, expiry_time, reason)
+    except Exception as exc:
+        try:
+            firewall.unban_ip(ip)
+        except Exception:
+            pass
+        raise exc
+    return expiry_time
+
+
+def execute_unban(ip, firewall, blacklist_db):
+    current_blacklist = {row[0]: row[1] for row in list_blacklist_rows(blacklist_db)}
+    if ip not in current_blacklist:
+        delete_blacklist_entry(blacklist_db, ip)
+        return False
+
+    try:
+        firewall.unban_ip(ip)
+        delete_blacklist_entry(blacklist_db, ip)
+    except Exception as exc:
+        raise exc
+    return True
+
+
+def parse_alert_line(line):
+    match = re.match(r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] (.+)", line)
+    if not match:
+        return {"raw": line}
+
+    timestamp, message = match.group(1), match.group(2)
+
+    alert_type = "unknown"
+    ip = None
+
+    if "[SSH暴力破解]" in message:
+        alert_type = "ssh_brute_force"
+        ip_match = re.search(r"来自 (\S+) 的登录失败", message)
+        if ip_match:
+            ip = ip_match.group(1)
+    elif "[Web攻击]" in message:
+        alert_type = "web_attack"
+        ip_match = re.search(r"来自 (\S+) 的可能攻击", message)
+        if ip_match:
+            ip = ip_match.group(1)
+    elif "[Webshell]" in message:
+        alert_type = "webshell"
+        file_match = re.search(r"可疑文件: (.+)", message)
+        if file_match:
+            ip = file_match.group(1)
+    elif "[封禁]" in message:
+        alert_type = "ban"
+        ip_match = re.search(r"IP (\S+) 因", message)
+        if ip_match:
+            ip = ip_match.group(1)
+    elif "[解封]" in message:
+        alert_type = "unban"
+        ip_match = re.search(r"IP (\S+) 已解封", message)
+        if ip_match:
+            ip = ip_match.group(1)
+    elif "[Webshell扫描]" in message:
+        alert_type = "webshell_scan"
+    elif "[状态加载]" in message or "[状态清理]" in message:
+        alert_type = "system"
+    elif "[监控启动]" in message:
+        alert_type = "system"
+    elif "[防火墙]" in message:
+        alert_type = "system"
+    elif "[错误]" in message:
+        alert_type = "error"
+    elif "[警告]" in message:
+        alert_type = "warning"
+    elif "[停止]" in message:
+        alert_type = "system"
+    elif "[日志轮转]" in message:
+        alert_type = "system"
+
+    result = {
+        "timestamp": timestamp,
+        "type": alert_type,
+        "message": message,
+    }
+    if ip:
+        result["ip"] = ip
+    return result

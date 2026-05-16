@@ -157,7 +157,7 @@ Notes:
 - `nftables` support uses a dedicated `mini_hids` table and timeout-enabled sets, so existing firewall policies should still be reviewed before production use.
 
 
-## v1.3 Release Notes
+## v1.2 Release Notes
 
 - Unified runtime configuration loading from config.json with default merging
 - Added shared core module for config, firewall, IP validation, and blacklist persistence
@@ -168,4 +168,22 @@ Notes:
 - Added incremental webshell scanning based on file modification time
 - Improved log tailing robustness with log rotation handling
 - Normalized runtime file paths for blacklist.db, hids_alert.log, and mini_hids.pid
-- Refactored to agent-native architecture with dedicated MCP control-plane API
+
+## v1.3 Release Notes
+
+- Refactored to agent-native architecture, removing human CLI interface
+- Created dedicated control-plane API module (`hids_core.py`) for MCP and agent integration
+- Removed `hids_cli.py` and its argparse-based command-line interface
+- Updated MCP server to import from control-plane API module
+- Simplified project structure by eliminating dual-mode (CLI + MCP) design
+- Updated documentation to reflect agent-native positioning and MCP-first workflow
+
+## v1.4 Release Notes
+
+- Extracted common ban/unban logic to `hids_common.py`, eliminating code duplication
+- Added `validate_ban_request()`, `execute_ban()`, `execute_unban()` shared functions
+- Added structured alert parsing with `parse_alert_line()` for agent-friendly output
+- Added `mini_hids_scan_webshell` MCP tool for on-demand webshell scanning
+- Extracted `WEBSHELL_PATTERNS` to shared module, removing duplicate definitions
+- Added unit tests (`test_hids.py`) covering core functionality
+- Added systemd service file (`mini-hids.service`) for production deployment

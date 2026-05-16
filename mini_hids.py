@@ -14,39 +14,23 @@ import time
 from collections import deque
 
 from hids_common import (
+    COMPILED_WEBSHELL_PATTERNS,
     FirewallManager,
     delete_blacklist_entry,
+    execute_ban,
+    execute_unban,
     init_db,
     list_blacklist_rows,
     load_config,
     purge_expired_blacklist_entries,
     upsert_blacklist_entry,
+    validate_ban_request,
     validate_ip,
 )
 
 
 CONFIG = load_config()
 FIREWALL = FirewallManager()
-
-WEBSHELL_PATTERNS = [
-    r"eval\(base64_decode\(",
-    r"proc_open\(",
-    r"shell_exec\(",
-    r"system\(",
-    r"passthru\(",
-    r"exec\(",
-    r"popen\(",
-    r"assert\(",
-    r"create_function\(",
-    r"array_map\(.*eval\(",
-    r"\$\_GET\[.*\]\(.*\)",
-    r"\$\_POST\[.*\]\(.*\)",
-    r"\$\_REQUEST\[.*\]\(.*\)",
-    r"file_put_contents\(.*\$\_",
-    r"fwrite\(.*\$\_",
-    r"\$\_FILES\[.*\]\['tmp_name'\]",
-]
-COMPILED_WEBSHELL_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in WEBSHELL_PATTERNS]
 
 WEB_ATTACK_PATTERNS = [
     r"' OR\s+",
@@ -122,22 +106,10 @@ def ban_ip(ip, reason):
         if ip in blacklist:
             return False
 
-    expiry_time = int(time.time() + CONFIG["BAN_TIME"])
-
     try:
-        FIREWALL.ban_ip(ip, CONFIG["BAN_TIME"])
+        expiry_time = execute_ban(ip, reason, CONFIG["BAN_TIME"], FIREWALL, CONFIG["BLACKLIST_DB"])
     except Exception as exc:
         log_alert(f"[错误] 执行封禁失败 {ip}: {exc}")
-        return False
-
-    try:
-        upsert_blacklist_entry(CONFIG["BLACKLIST_DB"], ip, expiry_time, reason)
-    except Exception as exc:
-        try:
-            FIREWALL.unban_ip(ip)
-        except Exception:
-            pass
-        log_alert(f"[错误] 持久化封禁失败 {ip}: {exc}")
         return False
 
     with state_lock:
@@ -161,12 +133,11 @@ def unban_ip(ip, reason="封禁到期自动解封"):
         return False
 
     try:
-        FIREWALL.unban_ip(ip)
+        execute_unban(ip, FIREWALL, CONFIG["BLACKLIST_DB"])
     except Exception as exc:
         log_alert(f"[错误] 执行解封失败 {ip}: {exc}")
         return False
 
-    delete_blacklist_entry(CONFIG["BLACKLIST_DB"], ip)
     with state_lock:
         blacklist.discard(ip)
         ban_times.pop(ip, None)

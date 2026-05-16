@@ -8,10 +8,10 @@ import json
 import sys
 from typing import Any, Dict
 
-from hids_core import ban_ip, ensure_runtime, get_alerts, get_blacklist, get_status, unban_ip
+from hids_core import ban_ip, ensure_runtime, get_alerts, get_blacklist, get_status, scan_webshell, unban_ip
 
 
-SERVER_INFO = {"name": "mini-hids", "version": "1.2.0"}
+SERVER_INFO = {"name": "mini-hids", "version": "1.4.0"}
 PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -60,6 +60,11 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "mini_hids_scan_webshell",
+        "description": "Scan web roots for suspicious webshell patterns. Returns list of suspicious files with matched patterns.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
 ]
 
 
@@ -93,6 +98,8 @@ def _handle_tool_call(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     if name == "mini_hids_unban_ip":
         result = unban_ip(arguments["ip"])
         return _tool_result(result, is_error=not result.get("success", False))
+    if name == "mini_hids_scan_webshell":
+        return _tool_result(scan_webshell())
     raise KeyError(name)
 
 
