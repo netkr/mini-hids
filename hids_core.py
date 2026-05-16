@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-轻量级主机入侵检测与日志分析系统（Mini-HIDS）
-版本：v1.1
-功能：CLI 命令行工具，专供 Agent 调用
-定位：控制面 / Agent 专属调用接口，无阻塞、无死循环，执行完立刻返回标准 JSON 字符串
+Mini-HIDS control-plane API for MCP and agent integration.
 """
 
-import argparse
-import json
 import os
 import time
 
@@ -166,48 +161,3 @@ def get_blacklist():
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         },
     }
-
-
-def main():
-    ensure_runtime()
-
-    parser = argparse.ArgumentParser(description="Mini-HIDS CLI 工具")
-    parser.add_argument(
-        "--action",
-        type=str,
-        required=True,
-        choices=["status", "get_alerts", "get_blacklist", "ban", "unban"],
-        help="执行的操作",
-    )
-    parser.add_argument("--ip", type=str, help="IP 地址")
-    parser.add_argument("--reason", type=str, help="封禁原因")
-    parser.add_argument("--lines", type=int, default=10, help="获取告警日志的行数")
-    args = parser.parse_args()
-
-    try:
-        if args.action == "status":
-            result = get_status()
-        elif args.action == "get_alerts":
-            result = get_alerts(args.lines)
-        elif args.action == "get_blacklist":
-            result = get_blacklist()
-        elif args.action == "ban":
-            if not args.ip:
-                result = {"success": False, "message": "缺少 IP 地址参数"}
-            elif not args.reason:
-                result = {"success": False, "message": "缺少封禁原因参数"}
-            else:
-                result = ban_ip(args.ip, args.reason)
-        else:
-            if not args.ip:
-                result = {"success": False, "message": "缺少 IP 地址参数"}
-            else:
-                result = unban_ip(args.ip)
-    except Exception as exc:
-        result = {"success": False, "message": f"执行操作失败: {exc}"}
-
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-if __name__ == "__main__":
-    main()

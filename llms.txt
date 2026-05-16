@@ -1,10 +1,10 @@
 # Mini-HIDS
 
-> Mini-HIDS is a lightweight Linux host intrusion detection tool for small servers. It monitors auth and web logs, tracks repeated failures in a sliding window, scans web roots for suspicious script patterns, stores ban state in SQLite, and exposes both a JSON CLI and an MCP tool server for agent workflows.
+> Mini-HIDS is a lightweight Linux host intrusion detection tool for small servers. It monitors auth and web logs, tracks repeated failures in a sliding window, scans web roots for suspicious script patterns, stores ban state in SQLite, and exposes an MCP tool server for agent-native security operations.
 
-Mini-HIDS is optimized for local or single-host deployments where simple detection, understandable code, and scriptable operations matter more than large-platform features.
+Mini-HIDS is optimized for local or single-host deployments where simple detection, understandable code, and agent integration matter more than large-platform features.
 
-When using this repository, treat `mini_hids.py` as the data-plane daemon, `hids_cli.py` as the operator and agent control plane, and `mcp_server.py` as the interface layer for MCP-compatible AI clients.
+When using this repository, treat `mini_hids.py` as the data-plane daemon, `hids_core.py` as the control-plane API, and `mcp_server.py` as the MCP interface layer for AI clients.
 
 Important behavior:
 
@@ -19,7 +19,7 @@ Important behavior:
 - [README.md](README.md): English overview, quick start, MCP usage, and operational notes
 - [README_zh.md](README_zh.md): Chinese overview and operator guidance
 - [mini_hids.py](mini_hids.py): Long-running daemon for log monitoring, auto-ban, and webshell scanning
-- [hids_cli.py](hids_cli.py): JSON CLI for status, alerts, blacklist, ban, and unban operations
+- [hids_core.py](hids_core.py): Control-plane API for MCP and agent integration
 - [hids_common.py](hids_common.py): Shared config loading, SQLite persistence, and firewall backends
 - [config.json](config.json): Runtime configuration for log paths, trust list, scan intervals, and file locations
 - [mcp_server.py](mcp_server.py): MCP stdio server exposing Mini-HIDS as AI-callable tools
@@ -27,19 +27,14 @@ Important behavior:
 ## Core APIs
 
 - `python3 mini_hids.py`: start the daemon
-- `python3 hids_cli.py --action status`: return daemon and backend status as JSON
-- `python3 hids_cli.py --action get_alerts --lines N`: return recent alerts as JSON
-- `python3 hids_cli.py --action get_blacklist`: return active blacklist entries as JSON
-- `python3 hids_cli.py --action ban --ip <IP> --reason "<TEXT>"`: ban an IP
-- `python3 hids_cli.py --action unban --ip <IP>`: unban an IP
 - `python3 mcp_server.py`: expose Mini-HIDS tools over stdio MCP
 
 ## Usage Scenarios
 
 - Protecting a small VPS against brute-force SSH attempts
-- Giving an AI coding assistant a safe, explicit interface for security checks on a Linux host
+- Giving an AI agent a safe, explicit interface for security checks on a Linux host
 - Embedding lightweight host monitoring into an operations or incident-response workflow
-- Demonstrating how to convert a simple CLI security project into an AI-readable and AI-callable repository
+- Demonstrating an agent-native security tool architecture
 
 ## Limitations
 

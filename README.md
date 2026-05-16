@@ -12,7 +12,7 @@ Mini-HIDS is a lightweight Linux host intrusion detection tool built with the Py
 - Detect obvious web attack payloads from access logs
 - Scan common script files for suspicious webshell patterns
 
-It also exposes both a JSON CLI and a minimal MCP server, so AI agents can inspect status, read alerts, query the blacklist, and trigger ban or unban actions through a standard tool interface.
+Mini-HIDS is designed as an **agent-native** security tool. It exposes a local MCP server so AI agents can inspect status, read alerts, query the blacklist, and trigger ban or unban actions through a standard tool interface.
 
 ## Why This Exists
 
@@ -21,9 +21,8 @@ Most open-source security tools are optimized for human operators first. Mini-HI
 This repository is a good fit if you want:
 
 - A single-host defensive tool for VPS or small Linux fleets
-- A JSON-first CLI for automation and agent usage
+- An agent-native interface via MCP for AI-driven security operations
 - Simple, inspectable detection logic instead of opaque pipelines
-- A local MCP tool server that IDE agents can call directly
 
 This repository is not a good fit if you need:
 
@@ -34,10 +33,10 @@ This repository is not a good fit if you need:
 ## Architecture
 
 - `mini_hids.py`: long-running daemon that tails logs, tracks attack windows, bans IPs, and rescans web roots
-- `hids_cli.py`: JSON-only control-plane CLI for operators and agents
+- `hids_core.py`: control-plane API for MCP and agent integration
 - `hids_common.py`: shared config loading, SQLite helpers, IP validation, and firewall backends
 - `mcp_server.py`: stdio MCP adapter that exposes Mini-HIDS actions as agent-callable tools
-- `config.json`: runtime configuration loaded by both the daemon and the CLI
+- `config.json`: runtime configuration loaded by both the daemon and the MCP server
 - `llms.txt`: LLM-oriented project map for AI search and coding assistants
 
 ## Quick Start
@@ -53,19 +52,9 @@ Adjust `config.json`, then start the daemon:
 sudo python3 mini_hids.py
 ```
 
-Use the JSON CLI:
-
-```bash
-python3 hids_cli.py --action status
-python3 hids_cli.py --action get_alerts --lines 20
-python3 hids_cli.py --action get_blacklist
-python3 hids_cli.py --action ban --ip 192.168.1.100 --reason "manual ban"
-python3 hids_cli.py --action unban --ip 192.168.1.100
-```
-
 ## Use With AI Agents
 
-Mini-HIDS now ships with a local MCP server. That means tools like Cursor, Claude Desktop, and other MCP-compatible clients can call the project directly instead of shelling out ad hoc.
+Mini-HIDS ships with a local MCP server. Tools like Cursor, Claude Desktop, and other MCP-compatible clients can call the project directly.
 
 Run the MCP server:
 
@@ -96,11 +85,11 @@ Available MCP tools:
 - `mini_hids_ban_ip`
 - `mini_hids_unban_ip`
 
-This is the practical replacement for a fake "one-click deploy" button. Mini-HIDS needs local log access and firewall privileges, so local or server-side MCP integration is the correct deployment model.
+This is the practical deployment model. Mini-HIDS needs local log access and firewall privileges, so local or server-side MCP integration is the correct approach.
 
-## CLI Output
+## MCP Tool Output
 
-All CLI commands return JSON. Example:
+All MCP tools return structured JSON. Example:
 
 ```json
 {
@@ -168,8 +157,7 @@ Notes:
 - `nftables` support uses a dedicated `mini_hids` table and timeout-enabled sets, so existing firewall policies should still be reviewed before production use.
 
 
-
-## v1.2 Release Notes
+## v1.3 Release Notes
 
 - Unified runtime configuration loading from config.json with default merging
 - Added shared core module for config, firewall, IP validation, and blacklist persistence
@@ -180,4 +168,4 @@ Notes:
 - Added incremental webshell scanning based on file modification time
 - Improved log tailing robustness with log rotation handling
 - Normalized runtime file paths for blacklist.db, hids_alert.log, and mini_hids.pid
-- Added JSON CLI for status, alerts, blacklist inspection, manual ban, and unban
+- Refactored to agent-native architecture with dedicated MCP control-plane API

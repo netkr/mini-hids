@@ -8,7 +8,7 @@ import json
 import sys
 from typing import Any, Dict
 
-from hids_cli import ban_ip, ensure_runtime, get_alerts, get_blacklist, get_status, unban_ip
+from hids_core import ban_ip, ensure_runtime, get_alerts, get_blacklist, get_status, unban_ip
 
 
 SERVER_INFO = {"name": "mini-hids", "version": "1.2.0"}
